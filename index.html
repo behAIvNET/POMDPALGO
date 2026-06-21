@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MDP / POMDP Çözüm Algoritması Seçim Matrisi</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=Syne:wght@400;700;800&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #0a0a0f;
+    --surface:  #111118;
+    --border:   #1e1e2e;
+    --accent1:  #7c6af7;
+    --accent2:  #f76a8a;
+    --accent3:  #6af7c8;
+    --accent4:  #f7c26a;
+    --text:     #e8e8f0;
+    --muted:    #6b6b80;
+    --klasik:   #7c6af7;
+    --dl:       #f76a8a;
+    --ensemble: #6af7c8;
+    --mbrl:     #f7c26a;
+    --danger:   #f7726a;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    padding: 2rem;
+  }
+
+  h1 {
+    font-size: clamp(1.4rem, 3vw, 2rem);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin-bottom: 0.3rem;
+    background: linear-gradient(90deg, var(--accent1), var(--accent3));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .subtitle {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-bottom: 2rem;
+  }
+
+  /* FILTERS */
+  .filters {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+
+  .filter-group label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    display: block;
+    margin-bottom: 0.5rem;
+  }
+
+  .filter-group select {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    padding: 0.6rem 0.8rem;
+    border-radius: 6px;
+    appearance: none;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+
+  .filter-group select:focus {
+    outline: none;
+    border-color: var(--accent1);
+  }
+
+  /* RECOMMENDATION BOX */
+  .recommendation {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.2rem 1.5rem;
+    margin-bottom: 2rem;
+    display: none;
+    animation: fadeIn 0.3s ease;
+  }
+
+  .recommendation.visible { display: block; }
+
+  .rec-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 0.5rem;
+  }
+
+  .rec-algo {
+    font-size: 1.3rem;
+    font-weight: 800;
+    margin-bottom: 0.4rem;
+  }
+
+  .rec-why {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  /* MATRIX TABLE */
+  .matrix-wrap { overflow-x: auto; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+  }
+
+  thead tr { border-bottom: 1px solid var(--border); }
+
+  th {
+    padding: 0.7rem 0.8rem;
+    text-align: left;
+    color: var(--muted);
+    font-weight: 400;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 0.75rem 0.8rem;
+    border-bottom: 1px solid #14141e;
+    vertical-align: middle;
+  }
+
+  tr { transition: background 0.15s; }
+  tr:hover td { background: #13131d; }
+  tr.highlighted td { background: #16162a; }
+  tr.dimmed td { opacity: 0.3; }
+
+  .algo-name {
+    font-weight: 600;
+    font-size: 0.78rem;
+  }
+
+  .tag {
+    display: inline-block;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+  }
+
+  .tag-klasik   { background: #1a1630; color: var(--klasik);   border: 1px solid #2d2550; }
+  .tag-dl       { background: #1f1020; color: var(--dl);       border: 1px solid #3a1530; }
+  .tag-ensemble { background: #0e1f1a; color: var(--ensemble); border: 1px solid #1a3d30; }
+  .tag-mbrl     { background: #2a2415; color: var(--mbrl);     border: 1px solid #4a3d1a; }
+
+  .dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+
+  .dot-good { background: var(--ensemble); }
+  .dot-ok   { background: var(--accent4); }
+  .dot-bad  { background: var(--danger); }
+  .dot-na   { background: var(--muted); }
+
+  /* LEGEND */
+  .legend {
+    display: flex;
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+    flex-wrap: wrap;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @media (max-width: 600px) {
+    .filters { grid-template-columns: 1fr; }
+    body { padding: 1rem; }
+  }
+</style>
+</head>
+<body>
+
+<h1>MDP / POMDP Çözüm Algoritması Seçim Matrisi</h1>
+<p class="subtitle">// gözlemlenebilirlik × model × kısıt → çözücü</p>
+
+<div class="filters">
+  <div class="filter-group">
+    <label>Problem (Gözlemlenebilirlik)</label>
+    <select id="f-problem" onchange="filter()">
+      <option value="">— seç —</option>
+      <option value="mdp">MDP · durum gözlemli</option>
+      <option value="pomdp">POMDP · gizli durum</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <label>Model / Yaklaşım</label>
+    <select id="f-model" onchange="filter()">
+      <option value="">— seç —</option>
+      <option value="model">Model biliniyor · planlama</option>
+      <option value="free">Model bilinmiyor · öğrenme</option>
+      <option value="ogrenilen">Model öğreniliyor · model-based RL</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <label>Öncelik / Kısıt</label>
+    <select id="f-kisit" onchange="filter()">
+      <option value="">— seç —</option>
+      <option value="kucuk">Küçük uzay · kesin çözüm</option>
+      <option value="buyuk">Büyük / sürekli durum</option>
+      <option value="online">Çevrimiçi · adım adım</option>
+      <option value="ucuz">Hızlı / ucuz çözüm</option>
+      <option value="bilgi">Aktif bilgi-toplama</option>
+      <option value="surekli">Sürekli aksiyon uzayı</option>
+    </select>
+  </div>
+</div>
+
+<div class="recommendation" id="rec-box">
+  <div class="rec-label">// önerilen çözüm algoritması</div>
+  <div class="rec-algo" id="rec-algo"></div>
+  <div class="rec-why" id="rec-why"></div>
+</div>
+
+<div class="matrix-wrap">
+<table id="matrix">
+  <thead>
+    <tr>
+      <th>Algoritma</th>
+      <th>Tür</th>
+      <th>Küçük Uzay</th>
+      <th>Büyük Uzay</th>
+      <th>Kesinlik</th>
+      <th>Çevrimiçi</th>
+      <th>Modelsiz</th>
+      <th>Sürekli Aks.</th>
+      <th>Gizli Durum</th>
+      <th>Bilgi Top.</th>
+      <th>Maliyet</th>
+    </tr>
+  </thead>
+  <tbody id="tbody"></tbody>
+</table>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><span class="dot dot-good"></span> uygun / güçlü</div>
+  <div class="legend-item"><span class="dot dot-ok"></span> kısmen / koşullu</div>
+  <div class="legend-item"><span class="dot dot-bad"></span> uygun değil / zayıf</div>
+  <div class="legend-item"><span class="dot dot-na"></span> geçersiz (n/a)</div>
+  <div class="legend-item"><span class="tag tag-klasik">MDP</span> gözlemli · planlama</div>
+  <div class="legend-item"><span class="tag tag-dl">POMDP</span> gizli durum</div>
+  <div class="legend-item"><span class="tag tag-ensemble">öğrenme</span> model-free</div>
+  <div class="legend-item"><span class="tag tag-mbrl">model-based RL</span> öğrenilen model</div>
+</div>
+
+<script>
+// cells sırası: [küçük, büyük, kesinlik, çevrimiçi, modelsiz, sürekliAks, gizli, bilgi, maliyet]
+const A = [
+  // ── MDP · MODEL-TABANLI (PLANLAMA) ──
+  {n:"Value Iteration", e:"Bellman backup → V*", tag:"tag-klasik", p:"mdp", m:"model", k:"kucuk ucuz",
+   c:[["good","iyi"],["bad","patlar"],["good","kesin"],["bad","offline"],["bad","model şart"],["bad","ayrık"],["bad","hayır"],["na","n/a"],["ok","O(|S|²|A|)"]]},
+  {n:"Policy Iteration", e:"eval + improve", tag:"tag-klasik", p:"mdp", m:"model", k:"kucuk ucuz",
+   c:[["good","iyi"],["bad","patlar"],["good","kesin"],["bad","offline"],["bad","model şart"],["bad","ayrık"],["bad","hayır"],["na","n/a"],["ok","az iter/pahalı"]]},
+  {n:"Linear Programming", e:"LP formülasyonu", tag:"tag-klasik", p:"mdp", m:"model", k:"kucuk",
+   c:[["good","iyi"],["bad","ölçeklenmez"],["good","kesin"],["bad","offline"],["bad","model şart"],["bad","ayrık"],["bad","hayır"],["na","n/a"],["ok","LP çözücü"]]},
+  {n:"Fitted Value Iteration", e:"Yaklaşık VI · FA", tag:"tag-klasik", p:"mdp", m:"model", k:"buyuk",
+   c:[["ok","gereksiz"],["good","sürekli durum"],["bad","ıraksayabilir"],["bad","offline"],["ok","simülatör"],["ok","durum sürekli"],["bad","hayır"],["na","n/a"],["ok","örnekle+fit"]]},
+  {n:"MCTS / UCT", e:"Monte Carlo Tree Search", tag:"tag-klasik", p:"mdp", m:"model", k:"buyuk online",
+   c:[["ok","gereksiz"],["good","devasa"],["ok","anytime"],["good","online"],["ok","simülatör"],["bad","ayrık (PW)"],["bad","MDP"],["na","n/a"],["ok","bütçeye göre"]]},
+
+  // ── MDP · MODEL-FREE (ÖĞRENME) ──
+  {n:"Q-Learning", e:"off-policy TD", tag:"tag-ensemble", p:"mdp", m:"free", k:"kucuk online ucuz",
+   c:[["good","yakınsar"],["ok","FA ile"],["ok","tabular"],["good","online"],["good","model-free"],["bad","ayrık"],["bad","MDP"],["na","n/a"],["ok","örnek-yoğun"]]},
+  {n:"SARSA", e:"on-policy TD", tag:"tag-ensemble", p:"mdp", m:"free", k:"kucuk online ucuz",
+   c:[["good","yakınsar"],["ok","FA ile"],["ok","tabular"],["good","online"],["good","model-free"],["bad","ayrık"],["bad","MDP"],["na","n/a"],["ok","örnek-yoğun"]]},
+  {n:"DQN", e:"deep değer-tabanlı", tag:"tag-ensemble", p:"mdp", m:"free", k:"buyuk online",
+   c:[["ok","ağır"],["good","yüksek boyut"],["bad","garantisiz"],["good","online"],["good","model-free"],["bad","ayrık"],["bad","MDP"],["na","n/a"],["bad","örnek-pahalı"]]},
+  {n:"PPO / A2C", e:"on-policy politika-gradyan", tag:"tag-ensemble", p:"mdp", m:"free", k:"buyuk online surekli",
+   c:[["ok","ağır"],["good","yüksek boyut"],["bad","lokal"],["good","online"],["good","model-free"],["good","evet"],["bad","MDP"],["na","n/a"],["bad","örnek-pahalı"]]},
+  {n:"DDPG / TD3", e:"off-policy actor-critic", tag:"tag-ensemble", p:"mdp", m:"free", k:"surekli online buyuk",
+   c:[["ok","ağır"],["good","yüksek boyut"],["bad","garantisiz"],["good","online"],["good","model-free"],["good","sürekli"],["bad","MDP"],["na","n/a"],["ok","örnek-yoğun"]]},
+  {n:"SAC", e:"maks-entropi actor-critic", tag:"tag-ensemble", p:"mdp", m:"free", k:"surekli online buyuk",
+   c:[["ok","ağır"],["good","yüksek boyut"],["bad","garantisiz"],["good","online"],["good","model-free"],["good","sürekli"],["bad","MDP"],["na","n/a"],["ok","örnek-verimli"]]},
+  {n:"Recurrent Deep RL", e:"DRQN / R2D2", tag:"tag-ensemble", p:"pomdp mdp", m:"free", k:"buyuk online bilgi",
+   c:[["ok","ağır"],["good","yüksek boyut"],["bad","garantisiz"],["good","online"],["good","model-free"],["ok","rec. SAC ile"],["good","evet (RNN)"],["na","n/a"],["bad","pahalı"]]},
+
+  // ── MODEL-BASED RL (ÖĞRENİLEN MODEL) ──
+  {n:"Dyna-Q", e:"öğren model + planla", tag:"tag-mbrl", p:"mdp", m:"ogrenilen", k:"kucuk ucuz",
+   c:[["good","iyi"],["ok","model zor"],["ok","tabular"],["good","online"],["ok","öğrenir"],["bad","ayrık"],["bad","MDP"],["na","n/a"],["good","örnek-verimli"]]},
+  {n:"MuZero", e:"öğrenilmiş model + MCTS", tag:"tag-mbrl", p:"mdp", m:"ogrenilen", k:"buyuk online",
+   c:[["ok","ağır"],["good","devasa"],["bad","garantisiz"],["good","MCTS online"],["ok","öğrenir"],["ok","ayrık (varyant)"],["bad","MDP"],["na","n/a"],["bad","çok pahalı"]]},
+  {n:"Dreamer (V3)", e:"latent world model", tag:"tag-mbrl", p:"mdp pomdp", m:"ogrenilen", k:"buyuk online surekli bilgi",
+   c:[["ok","ağır"],["good","yüksek boyut"],["bad","garantisiz"],["good","online"],["ok","öğrenir"],["good","sürekli"],["good","evet (latent)"],["na","n/a"],["ok","örnek-verimli"]]},
+
+  // ── POMDP · MODEL-TABANLI ──
+  {n:"Exact POMDP VI", e:"alpha-vektör backup", tag:"tag-dl", p:"pomdp", m:"model", k:"kucuk",
+   c:[["ok","çok küçük"],["bad","PSPACE"],["good","optimal"],["bad","offline"],["bad","model şart"],["bad","ayrık"],["good","evet"],["good","tam"],["bad","üstel"]]},
+  {n:"QMDP", e:"üst-sınır · |A| alpha", tag:"tag-dl", p:"pomdp", m:"model", k:"ucuz",
+   c:[["good","iyi"],["ok","belief'e bağlı"],["bad","üst-sınır"],["ok","lookup"],["bad","model şart"],["bad","ayrık"],["good","evet"],["bad","asla"],["good","MDP kadar"]]},
+  {n:"FIB", e:"Fast Informed Bound", tag:"tag-dl", p:"pomdp", m:"model", k:"ucuz",
+   c:[["good","iyi"],["ok","belief'e bağlı"],["bad","üst-sınır"],["ok","lookup"],["bad","model şart"],["bad","ayrık"],["good","evet"],["ok","kısmen"],["good","polinom"]]},
+  {n:"PBVI", e:"Point-Based VI", tag:"tag-dl", p:"pomdp", m:"model", k:"buyuk bilgi",
+   c:[["good","iyi"],["good","ölçeklenir"],["ok","iyi yaklaşık"],["bad","offline"],["bad","model şart"],["bad","ayrık"],["good","evet"],["good","değerler"],["ok","nokta sayısı"]]},
+  {n:"HSVI", e:"Heuristic Search VI", tag:"tag-dl", p:"pomdp", m:"model", k:"buyuk bilgi",
+   c:[["good","iyi"],["good","ölçeklenir"],["ok","sınırlı garanti"],["bad","offline"],["bad","model şart"],["bad","ayrık"],["good","evet"],["good","değerler"],["ok","verimli"]]},
+  {n:"SARSOP", e:"point-based · state-of-art", tag:"tag-dl", p:"pomdp", m:"model", k:"buyuk bilgi",
+   c:[["good","iyi"],["good","ölçeklenir"],["ok","en iyi pratik"],["bad","offline"],["bad","model şart"],["bad","ayrık"],["good","evet"],["good","değerler"],["ok","verimli"]]},
+  {n:"POMCP", e:"MCTS + parçacık filtresi", tag:"tag-dl", p:"pomdp", m:"model", k:"buyuk online",
+   c:[["ok","gereksiz"],["good","devasa"],["ok","anytime"],["good","online"],["ok","simülatör"],["bad","ayrık (POMCPOW)"],["good","evet"],["ok","örnekle"],["ok","bütçeye göre"]]},
+  {n:"DESPOT", e:"belirlenimci senaryo ağacı", tag:"tag-dl", p:"pomdp", m:"model", k:"buyuk online",
+   c:[["ok","gereksiz"],["good","devasa"],["ok","regret sınırı"],["good","online"],["ok","simülatör"],["bad","ayrık"],["good","evet"],["ok","örnekle"],["ok","bütçeye göre"]]},
+];
+
+const tb = document.getElementById('tbody');
+tb.innerHTML = A.map(a => {
+  const cells = a.c.map(d =>
+    `<td><span class="dot dot-${d[0]}"></span>${d[1]}</td>`).join('');
+  return `<tr data-problem="${a.p}" data-model="${a.m}" data-kisit="${a.k}">
+    <td><span class="algo-name">${a.n}</span><br><span style="color:var(--muted);font-size:0.62rem">${a.e}</span></td>
+    <td><span class="tag ${a.tag}">${a.tag==='tag-klasik'?'MDP':a.tag==='tag-dl'?'POMDP':a.tag==='tag-mbrl'?'model-based':'öğrenme'}</span></td>
+    ${cells}
+  </tr>`;
+}).join('');
+
+const recommendations = {
+  // MDP · model verili
+  "mdp-model-kucuk":  ["Value Iteration / Policy Iteration", "Gözlemli MDP + model var + küçük uzay + kesinlik → VI en temel çözücü; γ→1'e yakınsa PI daha az turda biter. İkisi de Bellman backup'ını sabit-noktaya yineler, garantili optimal."],
+  "mdp-model-buyuk":  ["MCTS / UCT (veya Fitted VI)", "Gözlemli MDP + simülatör + devasa/sürekli durum → VI tabloyu kuramaz. Online karar için MCTS; offline değer fonksiyonu istiyorsan Fitted VI (kontraksiyon garantisi zayıflar)."],
+  "mdp-model-online": ["MCTS / UCT", "Gözlemli MDP + simülatör + çevrimiçi karar → MCTS şu andan ileriye anytime arama yapar, kökten en çok ziyaret edilen eylemi oynar."],
+  "mdp-model-ucuz":   ["Value Iteration", "Gözlemli MDP + hızlı/ucuz çözüm → küçük-orta uzayda VI zaten en ucuz garantili yol. Tek tablo, sade backup."],
+  "mdp-model-bilgi":  ["⚠ MDP'de aktif bilgi-toplama sorunu yoktur", "Gözlemli MDP'de durum zaten görünür — aktif sensing yalnız gizli-durumda (POMDP) anlamlıdır. Burada doğrudan VI/PI yeterli."],
+  "mdp-model-surekli":["⚠ Sürekli aksiyon + model → optimal kontrol (iLQR / MPC)", "Sürekli aksiyon + model verili → asıl araç model-tabanlı yörünge optimizasyonu (iLQR, MPC) — ayrık-MDP çözücülerinin dışında. VI/MCTS sürekli aksiyonu doğal kaldıramaz (max patlar)."],
+
+  // MDP · model yok (öğrenme)
+  "mdp-free-kucuk":   ["Q-Learning / SARSA (tabular)", "Gözlemli MDP + model YOK + küçük uzay → tablo-tabanlı TD. Off-policy optimal için Q-Learning, on-policy / güvenli çevrimiçi için SARSA."],
+  "mdp-free-buyuk":   ["DQN (ayrık aksiyon) / PPO", "Model yok + yüksek boyut → ayrık aksiyonda DQN; hem ayrık hem sürekli için PPO (politika-gradyan). Veri/hesap-yoğun."],
+  "mdp-free-online":  ["Q-Learning / SARSA", "Model yok + çevrimiçi öğrenme → her adım deneyimden TD güncellemesi. Off-policy Q-Learning ya da on-policy SARSA."],
+  "mdp-free-ucuz":    ["Q-Learning (tabular)", "Model yok + hız/azlık → tabular Q-Learning hafiftir; uzay küçükse derin ağa gerek yok."],
+  "mdp-free-bilgi":   ["⚠ MDP'de aktif bilgi-toplama sorunu yoktur", "Durum gözlemli olduğundan sensing gerekmez. Model yoksa Q-Learning/SARSA ile öğren."],
+  "mdp-free-surekli": ["SAC (veya TD3 / DDPG)", "Gözlemli + model yok + SÜREKLI aksiyon → off-policy actor-critic. SAC (maks-entropi) bugün varsayılan; TD3/DDPG deterministik alternatif. DQN burada çalışmaz (aksiyon ayrık ister)."],
+
+  // MDP · öğrenilen model
+  "mdp-ogrenilen-kucuk":  ["Dyna-Q", "Gözlemli + modeli ÖĞREN + küçük uzay → Dyna-Q gerçek deneyimle hem Q günceller hem model öğrenir, sonra modelden hayali güncellemeler yapar. Örnek-verimli."],
+  "mdp-ogrenilen-buyuk":  ["MuZero / MBPO", "Modeli öğren + büyük uzay → MuZero öğrenilmiş latent model + MCTS; MBPO öğrenilen modelle kısa rollout'lar. Yüksek örnek verimi, ağır hesap."],
+  "mdp-ogrenilen-online": ["MuZero", "Modeli öğren + çevrimiçi → MuZero her adımda öğrenilmiş modelle MCTS yapar. Planlamayı öğrenmeyle birleştirir."],
+  "mdp-ogrenilen-ucuz":   ["Dyna-Q", "Modeli öğren + örnek azlığı → Dyna-Q model tekrar-kullanımıyla az gerçek örnekten çok öğrenir."],
+  "mdp-ogrenilen-bilgi":  ["⚠ MDP'de aktif bilgi-toplama sorunu yoktur", "Durum gözlemli → sensing gerekmez. Örnek verimi istiyorsan Dyna-Q / MuZero."],
+  "mdp-ogrenilen-surekli":["Dreamer (V3) / MBPO", "Modeli öğren + sürekli aksiyon → Dreamer latent world model üstünde hayali rollout'larla sürekli politika öğrenir. Model-based + sürekli + örnek-verimli."],
+
+  // POMDP · model verili
+  "pomdp-model-kucuk":  ["Exact POMDP VI (alpha-vektör)", "Gizli durum + model var + ÇOK küçük uzay + kesinlik → alpha-vektör backup'larıyla gerçek optimal. Vektör sayısı her backup'ta patlar (PSPACE-hard); pratikte sadece oyuncak problemler."],
+  "pomdp-model-buyuk":  ["SARSOP / HSVI / PBVI (point-based)", "Gizli durum + model + büyük uzay → exact patlar. Point-based yöntemler örneklenmiş inanç noktalarında backup yapıp ölçeklenir. SARSOP en güçlü offline; HSVI/PBVI aynı aile."],
+  "pomdp-model-online": ["POMCP / DESPOT", "Gizli durum + simülatör + çevrimiçi → POMCP MCTS'in inanç-uzayı hali (geçmiş düğümleri + parçacık filtresi); DESPOT belirlenimci senaryo ağaçlarıyla daha kararlı. İkisi de anytime."],
+  "pomdp-model-ucuz":   ["QMDP / FIB", "Gizli durum + hızlı ucuz politika ya da üst-sınır → QMDP (MDP kadar ucuz, gözlemi yok sayar) veya FIB (gözlemi kısmen katar, biraz daha sıkı). DİKKAT: ikisi de aktif bilgi-toplamaz."],
+  "pomdp-model-bilgi":  ["PBVI / SARSOP / HSVI (point-based)", "Gizli durum + AKTİF bilgi toplama gerekli (dinle/yokla/keşfet) → QMDP/FIB burada başarısız (asla sensing seçmez). Point-based yöntemler inanç noktalarında düzgün backup yapıp bilgi değerini gerçekten hesaba katar."],
+  "pomdp-model-surekli":["⚠ Sürekli POMDP zor — POMCPOW / parçacık", "Gizli durum + sürekli aksiyon/gözlem + model → alpha-vektör ve point-based ayrık varsayar. Sürekli için POMCP'nin sürekli varyantları (POMCPOW) ya da parçacık-tabanlı online yöntemler. Uzmanlık alanı."],
+
+  // POMDP · model yok
+  "pomdp-free-kucuk":  ["DRQN / R2D2 (recurrent deep RL)", "Gizli durum + model YOK → bellekli derin RL (recurrent ağ geçmişi özetler, inanç-özeti rolü görür). Tablo-tabanlı POMDP öğrenmesi nadirdir; küçük uzayda bile RNN'li yaklaşım."],
+  "pomdp-free-buyuk":  ["R2D2 / recurrent deep RL", "Gizli durum + model yok + büyük → recurrent derin RL. Ağın gizli durumu inanç yerine geçer. Veri/hesap-yoğun, garantisiz."],
+  "pomdp-free-online": ["Recurrent politika (+ parçacık)", "Gizli + model yok + çevrimiçi → recurrent politika online çalışır; gerekirse öğrenilmiş model + POMCP-benzeri arama. İleri seviye."],
+  "pomdp-free-ucuz":   ["⚠ Ucuz + gizli + modelsiz zor bir kesişim", "Üçü birlikte zorlu. En hafif yol bir nokta-tahminiyle MDP'ye indirip Q-Learning; ama gizli durum bilgisini kaybedersin."],
+  "pomdp-free-bilgi":  ["Recurrent deep RL + keşif bonusu", "Gizli + modelsiz + aktif bilgi → bellekli derin RL + keşif teşviki (entropi/merak). Bilgi-toplamayı ödülden öğrenir."],
+  "pomdp-free-surekli":["Recurrent SAC", "Gizli + model yok + sürekli aksiyon → recurrent (LSTM/GRU) gövdeli SAC. Bellek gizli durumu, SAC sürekli aksiyonu halleder."],
+
+  // POMDP · öğrenilen model
+  "pomdp-ogrenilen-kucuk":  ["Dreamer (latent world model)", "Gizli durum + modeli ÖĞREN → Dreamer latent uzayda dünya modeli öğrenir; latent durum inanç yerine geçer. Kısmi gözlemi doğal kaldırır."],
+  "pomdp-ogrenilen-buyuk":  ["DreamerV3", "Gizli + modeli öğren + büyük → DreamerV3 piksel/kısmi gözlemden latent model öğrenip hayali rollout'larla planlar. Geniş alanda güçlü."],
+  "pomdp-ogrenilen-online": ["Dreamer (+ öğrenilmiş model arama)", "Gizli + öğrenilen model + çevrimiçi → Dreamer latent modelde online plan; alternatif öğrenilmiş model + POMCP."],
+  "pomdp-ogrenilen-ucuz":   ["Dreamer", "Gizli + öğrenilen model + azlık → Dreamer model tekrar-kullanımıyla örnek-verimli; kısmi gözlemi de taşır."],
+  "pomdp-ogrenilen-bilgi":  ["DreamerV3 + keşif", "Gizli + öğrenilen model + aktif bilgi → Dreamer latent modeli + merak/keşif bonusu. Bilgi-toplamayı öğrenir."],
+  "pomdp-ogrenilen-surekli":["DreamerV3", "Gizli + öğrenilen model + sürekli aksiyon → DreamerV3 tam bu kesişim: latent world model (kısmi gözlem) + sürekli politika + örnek verimi. Bugün en güçlü model-based seçenek."],
+};
+
+function filter() {
+  const p = document.getElementById('f-problem').value;
+  const m = document.getElementById('f-model').value;
+  const k = document.getElementById('f-kisit').value;
+
+  const rows = document.querySelectorAll('#matrix tbody tr');
+
+  rows.forEach(row => {
+    row.classList.remove('highlighted', 'dimmed');
+    if (!p && !m && !k) return;
+
+    const rp = row.dataset.problem || '';
+    const rm = row.dataset.model   || '';
+    const rk = row.dataset.kisit   || '';
+
+    const pMatch = !p || rp.split(' ').includes(p);
+    const mMatch = !m || rm === m;
+    const kMatch = !k || rk.split(' ').includes(k);
+
+    if (pMatch && mMatch && kMatch) {
+      row.classList.add('highlighted');
+    } else {
+      row.classList.add('dimmed');
+    }
+  });
+
+  const recBox = document.getElementById('rec-box');
+  if (p && m && k) {
+    const key = `${p}-${m}-${k}`;
+    const rec = recommendations[key];
+    if (rec) {
+      document.getElementById('rec-algo').textContent = rec[0];
+      document.getElementById('rec-why').textContent  = rec[1];
+
+      const el = document.getElementById('rec-algo');
+      if (rec[0].includes('⚠')) {
+        el.style.color = 'var(--danger)';
+      } else if (/Dreamer|MuZero|Dyna-Q|MBPO/i.test(rec[0])) {
+        el.style.color = 'var(--mbrl)';       // model-based RL
+      } else if (/POMCP|DESPOT|SARSOP|PBVI|HSVI|QMDP|FIB|POMDP|alpha|POMCPOW/i.test(rec[0])) {
+        el.style.color = 'var(--dl)';          // POMDP çözücüleri
+      } else if (/Q-Learning|SARSA|DQN|PPO|A2C|DDPG|TD3|SAC|DRQN|R2D2|Recurrent/i.test(rec[0])) {
+        el.style.color = 'var(--ensemble)';    // model-free öğrenme
+      } else {
+        el.style.color = 'var(--klasik)';      // MDP planlama
+      }
+      recBox.classList.add('visible');
+    } else {
+      recBox.classList.remove('visible');
+    }
+  } else {
+    recBox.classList.remove('visible');
+  }
+}
+</script>
+</body>
+</html>
